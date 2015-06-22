@@ -68,7 +68,7 @@ public class MainActivity extends FragmentActivity {
         fm = getSupportFragmentManager();
 
         VKSdk.initialize(sdkListener, VK_APP_ID);
-        VKSdk.authorize(VKScope.FRIENDS);
+        VKSdk.authorize(VKScope.FRIENDS,VKScope.PHOTOS,VKScope.WALL);
 
         if (VKSdk.wakeUpSession()) {
             startLoading();

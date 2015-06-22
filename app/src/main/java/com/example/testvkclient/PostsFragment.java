@@ -1,32 +1,41 @@
 package com.example.testvkclient;
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.os.AsyncTask;
 import android.os.Bundle;
-import android.support.v4.app.ListFragment;
-import android.text.TextUtils;
+import android.support.v4.app.Fragment;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
 
-import com.vk.sdk.api.VKApi;
+import com.vk.sdk.VKScope;
+import com.vk.sdk.VKSdk;
 import com.vk.sdk.api.VKApiConst;
 import com.vk.sdk.api.VKError;
 import com.vk.sdk.api.VKParameters;
 import com.vk.sdk.api.VKRequest;
 import com.vk.sdk.api.VKResponse;
-import com.vk.sdk.api.model.VKApiUserFull;
 import com.vk.sdk.api.model.VKUsersArray;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
-import org.joda.time.DateTime;
-import org.joda.time.format.DateTimeFormat;
-
+import java.io.InputStream;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.TimeZone;
 
-public class PostsFragment extends ListFragment {
+public class PostsFragment extends Fragment {
 
     private ArrayAdapter<Post> listAdapter;
     private final List<Post> posts = new ArrayList<>();
@@ -47,7 +56,25 @@ public class PostsFragment extends ListFragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        listAdapter = new ArrayAdapter<Post>(getActivity(), android.R.layout.simple_list_item_2, android.R.id.text1, posts) {
+    }
+
+    @Override
+    public View onCreateView (LayoutInflater inflater, ViewGroup container,
+                              Bundle savedInstanceState) {
+        View v = inflater.inflate(R.layout.fragment_posts, container, false);
+
+        Button logout_button = (Button)v.findViewById(R.id.logout_button);
+        logout_button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                VKSdk.logout();
+                VKSdk.authorize(VKScope.FRIENDS,VKScope.PHOTOS,VKScope.WALL);
+            }
+        });
+
+        listAdapter = new ArrayAdapter<Post>(getActivity().getApplicationContext(),
+                R.layout.posts_list_item, R.id.post_text, posts) {
+
             @Override
             public View getView(int position, View convertView, ViewGroup parent) {
 
@@ -55,63 +82,95 @@ public class PostsFragment extends ListFragment {
 
                 final Post post = getItem(position);
 
-                ((TextView) view.findViewById(android.R.id.text1)).setText(post.getName());
+                ((TextView) view.findViewById(R.id.author_name)).setText(post.getAuthor_name());
 
-                String birthDateStr = "Не задано";
+                new DownloadImageTask((ImageView) view.findViewById(R.id.photo_50))
+                        .execute(post.getPhoto_50());
 
-                DateTime dt = post.getBirthDate();
-
-                if (dt != null) {
-                    birthDateStr = dt.toString(DateTimeFormat.forPattern(post.getDateFormat()));
+                if (post.getPost_photos() != null) {
+                    new DownloadImageTask((ImageView) view.findViewById(R.id.post_photo))
+                            .execute(post.getPost_photos()[0]);
+                }
+                if (post.getText() != "")
+                    ((TextView) view.findViewById(R.id.post_text)).setText(post.getText());
+                else {
+                    view.findViewById(R.id.post_text).setVisibility(View.GONE);
                 }
 
-                ((TextView) view.findViewById(android.R.id.text2)).setText(birthDateStr);
+                Date date = new Date(post.getDate() * 1000l);
+                SimpleDateFormat sdf = new SimpleDateFormat("dd-MM HH:mm");
+                sdf.setTimeZone(TimeZone.getTimeZone("GMT+3"));
+                ((TextView) view.findViewById(R.id.date)).setText(sdf.format(date));
+
+                ((TextView) view.findViewById(R.id.likes)).setText(String.valueOf(post.getLikesCount()));
                 return view;
 
             }
+
         };
 
-
-        // TODO: Change Adapter to display your content
-        setListAdapter(listAdapter);
+        ((ListView)v.findViewById(R.id.posts_list)).setAdapter(listAdapter);
         startLoading();
+
+        return v;
     }
 
-    @Override
+    /*@Override
     public void onListItemClick(ListView l, View v, int position, long id) {
         super.onListItemClick(l, v, position, id);
 
-    }
+    }*/
 
     private void startLoading() {
-        currentRequest = VKApi.friends().get(VKParameters.from(VKApiConst.FIELDS, "id,first_name,last_name,bdate"));
+        currentRequest = new VKRequest("newsfeed.get", VKParameters.from(VKApiConst.FIELDS, "date,text,likes_count,sex,photo_200,photo_50"),
+                VKRequest.HttpMethod.GET, VKUsersArray.class);
         currentRequest.executeWithListener(new VKRequest.VKRequestListener() {
             @Override
             public void onComplete(VKResponse response) {
                 super.onComplete(response);
                 Log.d("VkDemoApp", "onComplete " + response);
+                JSONObject res;
+                JSONArray items;
+                JSONArray profiles;
+                JSONArray groups;
 
-                VKUsersArray usersArray = (VKUsersArray) response.parsedModel;
                 posts.clear();
-                final String[] formats = new String[]{"dd.MM.yyyy", "dd.MM"};
 
-                for (VKApiUserFull userFull : usersArray) {
-                    DateTime birthDate = null;
-                    String format = null;
-                    if (!TextUtils.isEmpty(userFull.bdate)) {
-                        for (String f : formats) {
-                            format = f;
-                            try {
-                                birthDate = DateTimeFormat.forPattern(format).parseDateTime(userFull.bdate);
-                            } catch (Exception ignored) {
+                try {
+                    res = response.json.getJSONObject("response");
+                    items = res.getJSONArray("items");
+                    groups = res.getJSONArray("groups");
+                    profiles = res.getJSONArray("profiles");
+
+                    for (int i = 0; i < items.length(); i++) {
+                        JSONObject post;
+                        if (items.getJSONObject(i).has("post_source"))
+                            post = items.getJSONObject(i);
+                        else continue;
+                        JSONObject publisher = null;
+                        int id = post.getInt("source_id");
+                        if (id < 0) {
+                            id = -id;
+                            for (int j = 0; j < groups.length(); j++) {
+                                publisher = groups.getJSONObject(j);
+                                if (publisher.getInt("id") == id)
+                                    break;
                             }
-                            if (birthDate != null) {
-                                break;
+                            posts.add(new Post(publisher.getString("name"), post.getLong("date"), post.getString("text")
+                                    , publisher.getString("photo_50"), getPostPhoto(post), post.getJSONObject("likes").getInt("count")));
+                        } else {
+                            for (int j = 0; j < profiles.length(); j++) {
+                                publisher = profiles.getJSONObject(j);
+                                if (publisher.getInt("id") == id)
+                                    break;
                             }
+                            String name = publisher.getString("first_name") + " " + publisher.getString("last_name");
+                            posts.add(new Post(name, post.getLong("date"), post.getString("text")
+                                    , publisher.getString("photo_50"), getPostPhoto(post), post.getJSONObject("likes").getInt("count")));
                         }
-
                     }
-                    posts.add(new Post(userFull.toString(), birthDate, format));
+                } catch (JSONException e) {
+                    e.printStackTrace();
                 }
                 listAdapter.notifyDataSetChanged();
             }
@@ -134,5 +193,52 @@ public class PostsFragment extends ListFragment {
                 Log.d("VkDemoApp", "onProgress " + progressType + " " + bytesLoaded + " " + bytesTotal);
             }
         });
+    }
+
+    private String[] getPostPhoto(JSONObject post) throws JSONException {
+
+        if (post.has("attachments")) {
+            JSONArray photos = post.getJSONArray("attachments");
+            ArrayList<String> post_photos = new ArrayList<>();
+            for (int i = 0; i < photos.length(); i++) {
+                JSONObject item = photos.getJSONObject(i);
+                if (item.getString("type").equals("photo")) {
+                    post_photos.add(item.getJSONObject("photo").getString("photo_130"));
+                }
+            }
+            if (post_photos.size() > 0) {
+                String[] photo_list = new String[post_photos.size()];
+                for (int i = 0; i < post_photos.size(); i++) {
+                    photo_list[i] = post_photos.get(i);
+                }
+                return photo_list;
+            }
+        }
+        return null;
+    }
+
+    private class DownloadImageTask extends AsyncTask<String, Void, Bitmap> {
+        ImageView bmImage;
+
+        public DownloadImageTask(ImageView bmImage) {
+            this.bmImage = bmImage;
+        }
+
+        protected Bitmap doInBackground(String... urls) {
+            String urldisplay = urls[0];
+            Bitmap mIcon11 = null;
+            try {
+                InputStream in = new java.net.URL(urldisplay).openStream();
+                mIcon11 = BitmapFactory.decodeStream(in);
+            } catch (Exception e) {
+                Log.e("Error", e.getMessage());
+                e.printStackTrace();
+            }
+            return mIcon11;
+        }
+
+        protected void onPostExecute(Bitmap result) {
+            bmImage.setImageBitmap(result);
+        }
     }
 }
