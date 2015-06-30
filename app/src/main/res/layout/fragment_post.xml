@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+;
+    <RelativeLayout
+        android:id="@+id/outer_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#E0E0FF">
+
+        <ImageView
+            android:id="@+id/author_avatar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="3dp"
+            android:layout_marginBottom="3dp"/>
+
+        <LinearLayout
+            android:id="@+id/layout1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_toEndOf="@id/author_avatar"
+            android:orientation="vertical"
+            android:layout_marginStart="3dp"
+            android:layout_marginBottom="3dp">
+
+            <TextView
+                android:id="@+id/author_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/vk_black"
+                android:textStyle="bold"/>
+
+            <TextView
+                android:id="@+id/post_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/vk_black"/>
+
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/repost_source_avatar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/layout1"
+            android:layout_toEndOf="@id/author_avatar"
+            android:layout_marginEnd="3dp"/>
+
+        <RelativeLayout
+            android:id="@+id/layout2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_toEndOf="@id/repost_source_avatar"
+            android:layout_below="@id/layout1">
+
+            <View
+                android:id="@+id/repost_arrow_image"
+                android:layout_marginTop="3dp"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
+                android:src="@drawable/repost_arrow"
+                android:layout_marginStart="3dp"/>
+
+            <TextView
+                android:id="@+id/repost_source_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/vk_black"
+                android:textStyle="bold"
+                android:layout_toEndOf="@id/repost_arrow_image"
+                android:layout_marginStart="3dp"
+                android:layout_marginBottom="3dp"/>
+
+            <TextView
+                android:id="@+id/repost_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/vk_black"
+                android:layout_below="@id/repost_source_name"
+                android:layout_marginStart="3dp"/>
+
+        </RelativeLayout>
+
+        <ImageView
+            android:id="@+id/post_photo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/layout2"
+            android:layout_alignStart="@id/layout2"
+            android:layout_marginStart="3dp"/>
+
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/outer_layout"
+        android:background="#E0E0FF">
+
+        <TextView
+            android:id="@+id/date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/vk_black"
+            android:layout_marginTop="3dp"
+            android:layout_alignParentStart="true"/>
+
+        <TextView
+            android:id="@+id/likes"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/vk_black"
+            android:layout_alignParentEnd="true"/>
+
+        <View
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:background="@drawable/like_image"
+            android:layout_toStartOf="@id/likes"
+            android:layout_marginEnd="3dp"/>
+
+    </RelativeLayout>
+
+</LinearLayout>

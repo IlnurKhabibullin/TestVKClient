@@ -100,7 +100,7 @@ public class MainActivity extends FragmentActivity {
         Fragment fragment = fm.findFragmentById(R.id.fragmentContainer);
 
         if (fragment == null) {
-            fragment = PostsFragment.newInstance();
+            fragment = NewsfeedFragment.newInstance();
             fm.beginTransaction()
                     .add(R.id.fragmentContainer, fragment)
                     .commit();
