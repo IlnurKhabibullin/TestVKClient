@@ -8,7 +8,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -16,7 +15,6 @@ import android.widget.TextView;
 
 import com.orangegangsters.github.swipyrefreshlayout.library.SwipyRefreshLayout;
 import com.orangegangsters.github.swipyrefreshlayout.library.SwipyRefreshLayoutDirection;
-import com.vk.sdk.VKScope;
 import com.vk.sdk.VKSdk;
 import com.vk.sdk.api.VKApiConst;
 import com.vk.sdk.api.VKError;
@@ -30,30 +28,35 @@ import org.json.JSONObject;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 import java.util.TimeZone;
 
 public class NewsfeedFragment extends Fragment {
 
     private ArrayAdapter<Post> listAdapter;
-    private final List<Post> posts = new ArrayList<>();
+    public final ArrayList<Post> posts = new ArrayList<>();
     ListView listView;
-    private String start_from = "";
-    private DownloadImageTask dim;
-
-    private VKRequest currentRequest;
+    public String start_from = "";
+    public int current_position = 0;
+    private DownloadImageTask dit;
 
     public static NewsfeedFragment newInstance() {
-//        Bundle args = new Bundle();
-        NewsfeedFragment fragment = new NewsfeedFragment();
-//        fragment.setArguments(args);
-        return fragment;
+        return new NewsfeedFragment();
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle savedInstanceState) {
+        super.onSaveInstanceState(savedInstanceState);
+        savedInstanceState.putParcelableArrayList("list_of_posts", posts);
+        savedInstanceState.putString("start_from", start_from);
     }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
+        if (savedInstanceState != null) {
+            posts.addAll((ArrayList)savedInstanceState.getParcelableArrayList("list_of_posts"));
+            start_from = savedInstanceState.getString("start_from");
+        }
     }
 
     @Override
@@ -62,20 +65,10 @@ public class NewsfeedFragment extends Fragment {
         final View v = inflater.inflate(R.layout.fragment_newsfeed, container, false);
 
 
-        Button logout_button = (Button)v.findViewById(R.id.logout_button);
-        logout_button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                VKSdk.logout();
-                VKSdk.authorize(VKScope.FRIENDS, VKScope.PHOTOS, VKScope.WALL);
-            }
-        });
-
         final SwipyRefreshLayout mSwipyRefreshLayout = (SwipyRefreshLayout) v.findViewById(R.id.pull_to_refresh);
         mSwipyRefreshLayout.setOnRefreshListener(new SwipyRefreshLayout.OnRefreshListener() {
             @Override
             public void onRefresh(SwipyRefreshLayoutDirection direction) {
-//                Boolean loadMore = direction != SwipyRefreshLayoutDirection.TOP;
                 mSwipyRefreshLayout.setRefreshing(true);
                 startLoading(direction != SwipyRefreshLayoutDirection.TOP);
                 mSwipyRefreshLayout.postDelayed(new Runnable() {
@@ -83,7 +76,7 @@ public class NewsfeedFragment extends Fragment {
                     public void run() {
                         mSwipyRefreshLayout.setRefreshing(false);
                     }
-                }, 3000);
+                }, 2000);
             }
         });
 
@@ -92,30 +85,40 @@ public class NewsfeedFragment extends Fragment {
 
             @Override
             public View getView(int position, View convertView, ViewGroup parent) {
+//                иногда в элементах не отображаются TextView, хотя данные загружены. Возможно это
+//                из-за ассинхронности загрузки данных и заполнения списка, но текст не появляется
+//                и в том случае, когда листаешь список, вызывая getView снова. Только когда переходишь к отдельному
+//                посту, или обновляешься через pullToRefresh, текст появляется.
 
                 View view = super.getView(position, convertView, parent);
 
                 Post post = getItem(position);
 
+                dit = new DownloadImageTask((ImageView) view.findViewById(R.id.list_author_avatar));
+                dit.executeAsyncTask(dit, post.getAuthor_avatar());
+
                 ((TextView) view.findViewById(R.id.list_author_name)).setText(post.getAuthor_name());
 
-                dim = new DownloadImageTask((ImageView) view.findViewById(R.id.list_author_avatar));
-                dim.executeAsyncTask(dim, post.getAuthor_avatar());
-                ImageView iv = (ImageView) view.findViewById(R.id.list_post_photo);
-                if (post.getPost_photos() != null) {
-                    dim = new DownloadImageTask(iv);
-                    dim.executeAsyncTask(dim, post.getPost_photos()[0]);
-                } else
-                    iv.setImageResource(R.drawable.empty_photo);
-
-                if (!post.getText().equals("")) {
-                    String text = post.getText();
-                    if (text.length() > 100)
-                        text = text.substring(0, 100) + " (...читать далее)";
+                String text = post.getText();
+                if (!(text.equals("") || text == null)) {
+                    if (text.length() > 140)
+                        text = text.substring(0, 140) + " (...читать далее)";
                     ((TextView) view.findViewById(R.id.list_post_text)).setText(text);
                 } else {
-                    view.findViewById(R.id.list_post_text).setVisibility(View.INVISIBLE);
+                    view.findViewById(R.id.list_post_text).setVisibility(View.GONE);
                 }
+
+                String description = "";
+                if (post.getPost_type()) {
+                    description = "Репост от \"" + post.getRepost_source_name() + "\". ";
+                }
+                if (post.getPost_photos() != null) {
+                    description += "В посте есть фото.";
+                }
+                if (!description.equals(""))
+                    ((TextView) view.findViewById(R.id.repost_description)).setText(description);
+                else
+                    view.findViewById(R.id.repost_description).setVisibility(View.GONE);
 
                 Date date = new Date(post.getDate());
                 SimpleDateFormat sdf = new SimpleDateFormat("dd-MM HH:mm");
@@ -135,18 +138,20 @@ public class NewsfeedFragment extends Fragment {
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 if (VKSdk.wakeUpSession()) {
                     getActivity().getSupportFragmentManager().beginTransaction()
-                            .replace(R.id.fragmentContainer, PostFragment.newInstance(listAdapter.getItem(position)))
+                            .replace(R.id.fragmentContainer, PostFragment.newInstance(listAdapter.getItem(position))
+                                    , "POST_FRAGMENT")
                             .addToBackStack(null).commit();
                 }
             }
         });
         listView.setAdapter(listAdapter);
-        startLoading(false);
-
+        if (posts.isEmpty())
+            startLoading(false);
         return v;
     }
 
     private void startLoading(final Boolean loadMore) {
+        VKRequest currentRequest;
         if (start_from.length() > 0 && loadMore) {
             currentRequest = new VKRequest("newsfeed.get", VKParameters.from(VKApiConst.COUNT, 30,
                     "start_from", start_from, VKRequest.HttpMethod.GET));
@@ -176,7 +181,7 @@ public class NewsfeedFragment extends Fragment {
                         JSONObject post = items.getJSONObject(i);
                         if (!post.has("post_source"))
                             continue;
-                        posts.add(getNewPost(profiles, groups, post));
+                        setNewPost(profiles, groups, post);
                     }
                 } catch (NullPointerException | JSONException e) {
                     e.printStackTrace();
@@ -204,26 +209,32 @@ public class NewsfeedFragment extends Fragment {
         });
     }
 
-    private Post getNewPost (JSONArray profiles, JSONArray groups, JSONObject post) throws JSONException{
-        String[] publisherData = getPosterName(profiles, groups, post, "source_id");
+    private void setNewPost(JSONArray profiles, JSONArray groups, JSONObject item) throws JSONException{
+        String[] publisherData = getPosterName(profiles, groups, item, "source_id");
 
         Post postToAdd = new Post();
         postToAdd.setAuthor_name(publisherData[0]);
         postToAdd.setAuthor_avatar(publisherData[1]);
-        postToAdd.setDate(post.getLong("date"));
-        postToAdd.setLikesCount(post.getJSONObject("likes").getInt("count"));
-        postToAdd.setText(post.getString("text"));
-        postToAdd.setPost_photos(getPhotosArray(post));
+        postToAdd.setDate(item.getLong("date"));
+        postToAdd.setLikesCount(item.getJSONObject("likes").getInt("count"));
+        postToAdd.setText(item.getString("text"));
         postToAdd.setPost_type(false);
-        if (post.has("copy_history")) {
+        if (item.has("copy_history")) {
             postToAdd.setPost_type(true);
-            JSONObject copyHistory = (JSONObject)post.getJSONArray("copy_history").get(0);
+            JSONObject copyHistory = (JSONObject)item.getJSONArray("copy_history").get(0);
+            if (copyHistory.has("attachments")) {
+                postToAdd.setPost_photos(getPhotosArray(copyHistory.getJSONArray("attachments")));
+                if (postToAdd.getPost_photos() != null && postToAdd.getPost_photos().length == 0) return;
+            }
             postToAdd.setRepost_text(copyHistory.getString("text"));
             publisherData = getPosterName(profiles, groups, copyHistory, "owner_id");
             postToAdd.setRepost_source_name(publisherData[0]);
             postToAdd.setRepost_source_avatar(publisherData[1]);
+        } else if (item.has("attachments")) {
+            postToAdd.setPost_photos(getPhotosArray(item.getJSONArray("attachments")));
+            if (postToAdd.getPost_photos() != null && postToAdd.getPost_photos().length == 0) return;
         }
-        return postToAdd;
+        posts.add(postToAdd);
     }
 
     private String[] getPosterName(JSONArray profiles, JSONArray groups, JSONObject post, String id_tag) throws JSONException {
@@ -252,41 +263,33 @@ public class NewsfeedFragment extends Fragment {
         return publisherData;
     }
 
-    private String[] getPhotosArray(JSONObject post) throws JSONException {
-
-        if (post.has("attachments")) {
-            JSONArray photos = post.getJSONArray("attachments");
-            ArrayList<String> post_photos = new ArrayList<>();
-            for (int i = 0; i < photos.length(); i++) {
-                JSONObject item = photos.getJSONObject(i);
-                if (item.getString("type").equals("photo")) {
-                    post_photos.add(item.getJSONObject("photo").getString("photo_130"));
-                }
-            }
-            if (post_photos.size() > 0) {
-                String[] photo_list = new String[post_photos.size()];
-                for (int i = 0; i < post_photos.size(); i++) {
-                    photo_list[i] = post_photos.get(i);
-                }
-                return photo_list;
-            }
-        } else if (post.has("copy_history")) {
-            //TODO there could be just text in repost, so then JsonException appears. Need to check all possible variants of posts
-            JSONArray photos = ((JSONObject)post.getJSONArray("copy_history").get(0)).getJSONArray("attachments");
-            ArrayList<String> post_photos = new ArrayList<>();
-            for (int i = 0; i < photos.length(); i++) {
-                JSONObject item = photos.getJSONObject(i);
-                if (item.getString("type").equals("photo"))
-                    post_photos.add(item.getJSONObject("photo").getString("photo_130"));
-            }
-            if (post_photos.size() > 0) {
-                String[] list = new String[post_photos.size()];
-                for (int i = 0; i < list.length; i++) {
-                    list[i] = post_photos.get(i);
-                }
-                return list;
+    private String[] getPhotosArray(JSONArray attachments) throws JSONException {
+        ArrayList<String> post_photos = new ArrayList<>();
+        for (int i = 0; i < attachments.length(); i++) {
+            JSONObject item = attachments.getJSONObject(i);
+            if (item.getString("type").equals("photo")) {
+                post_photos.add(item.getJSONObject("photo").getString("photo_130"));
             }
         }
+        if (post_photos.size() > 0) {
+            String[] photo_list = new String[post_photos.size()];
+            for (int i = 0; i < post_photos.size(); i++) {
+                photo_list[i] = post_photos.get(i);
+            }
+            return photo_list;
+        }
         return null;
+    }
+
+    public Boolean scrollUp () {
+        if (listView.getFirstVisiblePosition() != 0) {
+            current_position = listView.getLastVisiblePosition();
+            System.out.println("current position " + current_position);
+            listView.smoothScrollToPosition(0);
+            return true;
+        } else {
+            listView.smoothScrollToPosition(current_position);
+            return false;
+        }
     }
 }

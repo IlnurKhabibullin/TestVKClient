@@ -1,12 +1,9 @@
 package com.example.testvkclient;
 
-import java.io.Serializable;
+import android.os.Parcel;
+import android.os.Parcelable;
 
-/**
- * Created by Ильнур on 17.06.2015.
- */
-public class Post implements Serializable {
-//TODO fields, that posts require: attachments (photo, video, audio, link (only photo need, but maybe should notice about others))
+public class Post implements Parcelable {
     private String author_name;
     private String author_avatar;
     private Long date;
@@ -74,7 +71,7 @@ public class Post implements Serializable {
     public void setLikesCount(int likesCount) {
         this.likesCount = likesCount;
     }
-//if it's repost, then name of repost source
+//if post is repost, then name of repost source else it's null and shouldn't be used, as the fields below
     public String getRepost_source_name() {
         return repost_source_name;
     }
@@ -101,5 +98,24 @@ public class Post implements Serializable {
 //toString
     public String toString() {
         return text;
+    }
+
+    @Override
+    public int describeContents() {
+        return 0;
+    }
+
+    @Override
+    public void writeToParcel(Parcel dest, int flags) {
+        dest.writeString(author_name);
+        dest.writeString(author_avatar);
+        dest.writeString(text);
+        dest.writeString(repost_source_name);
+        dest.writeString(repost_source_avatar);
+        dest.writeString(repost_text);
+        dest.writeStringArray(post_photos);
+        dest.writeValue(post_type);
+        dest.writeInt(likesCount);
+        dest.writeLong(date);
     }
 }
